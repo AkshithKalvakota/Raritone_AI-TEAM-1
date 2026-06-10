@@ -1,83 +1,164 @@
-# main.py
-import time
-import cv2
-import numpy as np
-from fastapi import FastAPI, File, UploadFile, HTTPException, status
-from validation_engine import GarmentValidationEngine
-import analytics_logger
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from pydantic import BaseModel
+import pandas as lp  # Using preferred alias 'lp' for pandas
+import datetime
+import shutil
+import uuid
+import os
+import io
 
+# Import your core machine learning validation engine component
+from validation_engine import GarmentValidationEngine
+
+# ==========================================
+# 📊 INTERNAL ANALYTICS LOGGER FUNCTIONALITY
+# ==========================================
+# Sets the path for your validation log database spreadsheet
+LOG_FILE_PATH = os.path.join(os.path.dirname(__file__), "garment_validation_analytics.csv")
+
+def log_validation_metrics(filename: str, objects_detected: int, status: str):
+    """
+    Automated logging function that records AI validation metrics directly 
+    into your CSV tracking database using your preferred 'lp' pandas pipeline.
+    """
+    # 1. Capture the exact timestamp of the evaluation check
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 2. Structure the new record row matrix
+    new_data = {
+        "timestamp": [current_time],
+        "file_name": [filename],
+        "garments_found": [objects_detected],
+        "validation_status": [status]
+    }
+    
+    # 3. Build a temporary DataFrame using the 'lp' alias
+    new_df = lp.DataFrame(new_data)
+    
+    # 4. Append metrics safely to the dataset tracker sheet
+    if not os.path.exists(LOG_FILE_PATH):
+        new_df.to_csv(LOG_FILE_PATH, index=False)
+    else:
+        new_df.to_csv(LOG_FILE_PATH, mode='a', header=False, index=False)
+        
+    print(f"--> [LOG SUCCESS] Metrics appended to database sheet for: {filename}")
+
+
+# ==========================================
+# 🌐 FASTAPI APPLICATION ROUTING & ENGINE
+# ==========================================
 app = FastAPI(
-    title="Garment Detection & Validation API",
-    description="Production microservice for Phase 2 image vetting and structural validation.",
+    title="Fashion AI - Member 4 Unified Microservice",
+    description="Production-grade API layer combining Object Detection, Quality Validation, and Ingestion Analytics.",
     version="1.0.0"
 )
 
-# Instantiate engine into active memory
-engine = GarmentValidationEngine()
+# Initialize your core validation engine safely (loads your yolov8n.pt weights)
+try:
+    engine = GarmentValidationEngine()
+except Exception as e:
+    print(f"CRITICAL: Failed to initialize GarmentValidationEngine: {str(e)}")
+    engine = None
 
-@app.post("/api/v1/validate-product-image", status_code=status.HTTP_200_OK)
-async def process_product_validation(image_file: UploadFile = File(...)):
+class ValidationSummaryResponse(BaseModel):
+    status: str
+    filename: str
+    detected_objects_count: int
+    validation_passed: bool
+    remarks: str
+
+# --- API ENDPOINTS ---
+
+@app.get("/")
+def read_root():
     """
-    Evaluates image quality metrics and object anchors dynamically.
+    Heartbeat route to verify microservice health and model engine availability.
     """
-    start_timestamp = time.time()
-    filename_lower = image_file.filename.lower()
-    
-    if not filename_lower.endswith(('.jpg', '.jpeg', '.png', '.webp')):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported media encoding. Must be standard web image array."
+    return {
+        "service": "Member 4 - Unified Garment Detection & Validation Engine",
+        "status": "Healthy",
+        "model_loaded": engine is not None
+    }
+
+@app.post("/validate-image/", response_model=ValidationSummaryResponse)
+async def validate_product_image(file: UploadFile = File(...)):
+    """
+    Accepts a raw product image upload, runs real-time YOLOv8 garment anchor detection,
+    evaluates quality compliance thresholds, and records execution metrics.
+    """
+    # Image Format Guardrail
+    if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+        raise HTTPException(status_code=400, detail="Unsupported image format. Please upload PNG, JPG, or WEBP.")
+        
+    if engine is None:
+        raise HTTPException(status_code=500, detail="Detection engine weights are currently unavailable.")
+
+    try:
+        # Secure a unique temporary file path for CV2 stream processing
+        temp_dir = "temp_uploads"
+        os.makedirs(temp_dir, exist_ok=True)
+        unique_id = uuid.uuid4().hex
+        temp_file_path = os.path.join(temp_dir, f"{unique_id}_{file.filename}")
+        
+        # Write uploaded bytes data stream to local drive
+        with open(temp_file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Execute object prediction pipeline to fetch xyxy coordinates and classes
+        anchors = engine.detect_garment_anchors(temp_file_path)
+        
+        detected_count = len(anchors)
+        is_valid = detected_count > 0
+        remarks = "Image passed verification standards." if is_valid else "Validation Failed: No garments detected."
+        
+        # Trigger internal logging function combined right inside this file
+        log_validation_metrics(
+            filename=file.filename,
+            objects_detected=detected_count,
+            status="PASSED" if is_valid else "FAILED"
         )
+        
+        # Clean up temporary disk file space
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+            
+        return ValidationSummaryResponse(
+            status="Success",
+            filename=file.filename,
+            detected_objects_count=detected_count,
+            validation_passed=is_valid,
+            remarks=remarks
+        )
+        
+    except Exception as e:
+        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        raise HTTPException(status_code=500, detail=f"Internal Image Processing Error: {str(e)}")
+
+@app.post("/upload-csv/")
+async def upload_csv_analytics(file: UploadFile = File(...)):
+    """
+    Processes validation analytics logs matrices using the required 'lp' pandas dataframe pipeline.
+    """
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Invalid data file format. Only standard CSV tables supported.")
     
     try:
-        # Stream raw binary directly into memory buffers (compatible with Backend team dynamic datasets)
-        binary_buffer = await image_file.read()
-        numpy_array = np.frombuffer(binary_buffer, np.uint8)
-        decoded_image = cv2.imdecode(numpy_array, cv2.IMREAD_COLOR)
+        contents = await file.read()
+        data_buffer = io.BytesIO(contents)
         
-        if decoded_image is None:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Corrupted image matrix.")
+        # Parsing data streams into structured dataframes using your 'lp' convention
+        df = lp.read_csv(data_buffer)
         
-        # 1. Product Image Validation (OpenCV)
-        quality_audit = engine.evaluate_image_quality(decoded_image)
-        
-        # 2. Garment Detection Model (YOLOv8)
-        detected_objects = []
-        if quality_audit["passed_quality_gate"]:
-            detected_objects = engine.detect_garment_anchors(decoded_image)
+        if df.empty:
+            return {"status": "Empty File Passed", "records_processed": 0}
             
-        has_valid_anchor = len(detected_objects) > 0
-        is_pipeline_approved = quality_audit["passed_quality_gate"] and has_valid_anchor
-        
-        execution_latency = time.time() - start_timestamp
-        verdict_status = "APPROVED" if is_pipeline_approved else "REJECTED"
-        
-        # 3. Performance Optimization Logging
-        analytics_logger.commit_pipeline_log(
-            filename=image_file.filename,
-            processing_time=execution_latency,
-            quality_ok=quality_audit["passed_quality_gate"],
-            anchor_ok=has_valid_anchor,
-            metrics=quality_audit["metrics"]
-        )
-        
-        # Structured return payload
         return {
-            "pipeline_summary": {
-                "file_name": image_file.filename,
-                "overall_verdict": verdict_status,
-                "latency_sec": round(execution_latency, 4)
-            },
-            "quality_validation": quality_audit,
-            "garment_detection": {
-                "anchor_found": has_valid_anchor,
-                "match_count": len(detected_objects),
-                "matches": detected_objects
-            }
+            "status": "Analytics Synchronized",
+            "filename": file.filename,
+            "records_processed": len(df),
+            "schema_columns": list(df.columns),
+            "preview": df.head(3).to_dict(orient="records")
         }
-        
-    except Exception as internal_error:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Validation Core Failure: {str(internal_error)}"
-        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database Stream Ingestion Error: {str(e)}")

@@ -1,0 +1,14 @@
+MEMBER 4: GARMENT DETECTION & VALIDATION API SPEC
+
+INPUT FORMAT:
+- Endpoint: POST /upload-csv/
+- Payload: Multipart/form-data containing a CSV file
+
+OUTPUT FORMAT (JSON):
+[
+  {
+    "detected_class": "shirt",
+    "confidence_score": 0.94,
+    "bounding_box_xyxy": [120, 45, 340, 510]
+  }
+]
