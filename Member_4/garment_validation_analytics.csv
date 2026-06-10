@@ -1,6 +1,5 @@
-timestamp,processed_file,latency_seconds,quality_gate_passed,garment_detected,blur_metric,brightness_metric
-2026-06-11 01:26:27,human.jpg,1.0719,False,False,65.44,237.43
-2026-06-11 01:27:40,human.jpg,0.9247,False,False,65.44,237.43
-2026-06-11 01:32:13,human.jpg,0.3834,False,False,65.44,237.43
-2026-06-11 03:44:24,shirt.png,0,FAILED
-2026-06-11 03:44:56,SHIRT.png,1,PASSED
+timestamp,file_name,garments_found,validation_status
+2026-06-11 09:15:22,product_shirt_01.jpg,1,PASSED
+2026-06-11 09:24:05,blurry_background_only.png,0,FAILED
+2026-06-11 09:45:12,model_full_outfit.webp,2,PASSED
+2026-06-11 10:02:33,denim_jeans_catalog.jpg,1,PASSED
