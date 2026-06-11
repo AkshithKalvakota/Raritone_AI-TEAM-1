@@ -22,7 +22,7 @@ Member_2/
 ├── requirements.txt             # Consolidated system dependencies
 
 
-### Relational Entity Layout
+## Relational Entity Layout
 
 [order.csv]                    [product.csv]                  [category.csv]
 +---------------+              +---------------+              +---------------+
@@ -34,11 +34,11 @@ Member_2/
 +---------------+              +---------------+              +---------------+
 
 
-### The Three Predictive AI Engines
+## The Three Predictive AI Engines
 
 To optimize performance and isolate runtime parameters, the platform splits its features into three standalone Python microservices. They run completely independently on separate network ports.
 
-🔹 App 1: Daily Operations Forecasting (inventoryForecast.py)
+### 🔹 App 1: Daily Operations Forecasting (inventoryForecast.py)
 Core Focus: Short-Term Micro-Fulfillment & Warehouse Inventory Health.
 
 Network Port: 8000
@@ -47,7 +47,7 @@ Timeline Interval: Daily (D frequency granularity)
 
 Description: Monitors immediate transactional patterns to predict sales over an upcoming 14-day window. It aggregates daily sales, clips negative bounds to 0, compares projected requirements against active warehouse stock, and outputs an automated supply chain alert (Warehouse Levels Healthy or Trigger Production Replenishment Run).
 
-🔹 App 2: 6-Month Product Demand Strategic Engine (productDemand.py)
+### 🔹 App 2: 6-Month Product Demand Strategic Engine (productDemand.py)
 Core Focus: Mid-to-Long Range Manufacturing Run Allocation.
 
 Network Port: 8001
@@ -56,7 +56,7 @@ Timeline Interval: Month-End (ME frequency granularity)
 
 Description: Built for production planners. It analyzes macro-level demand signals by grouping units over long monthly buckets. This smooths out short-term noise to project volume requirements across a 6-month outlook horizon.
 
-🔹 App 3: 6-Month Financial & Revenue Trajectory Engine (trendForecasting.py)
+### 🔹 App 3: 6-Month Financial & Revenue Trajectory Engine (trendForecasting.py)
 Core Focus: Gross Revenue, Financial Planning, and Budget Forecasting.
 
 Network Port: 8002
@@ -65,4 +65,4 @@ Timeline Interval: Month-End (ME frequency granularity)
 
 Description: Swaps volume tracking for currency tracking. It multiplies order quantities by individual unit costs to map historical revenue trends. It generates a 6-month forecast of incoming revenue stream values (in ₹ Rupees), paired with a breakdown of annual sales seasonality patterns.
 
-DO READ DEPLOYMENT DETAILS AND REQUIREMENTS
+# DO READ DEPLOYMENT DETAILS AND REQUIREMENTS
